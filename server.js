@@ -93,9 +93,22 @@ app.post('/admin/api/sync', requireAdmin, async (_, res) => {
 });
 
 // SPA admin
-app.get('/admin', (_, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+//app.get('/admin', (_, res) => {
+  //res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+//});
+
+// SPA admin
+app.get(['/admin', '/admin/'], (req, res) => {
+  const filePath = path.join(__dirname, 'public', 'admin.html');
+  console.log('Serving admin from:', filePath);
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('Error sending admin.html:', err);
+      res.status(500).send('admin.html not found on server');
+    }
+  });
 });
+
 
 app.listen(PORT, () => {
   console.log(`AlgoTradeX admin API on :${PORT}`);
