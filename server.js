@@ -136,7 +136,7 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 //const cors = require('cors');
-const app = express();
+//const app = express();
 
 // Налаштування CORS
 app.use(cors({
