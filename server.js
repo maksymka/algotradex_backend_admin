@@ -135,7 +135,7 @@ app.listen(PORT, '0.0.0.0', () => {
   scheduleHourlyFunding();
 });
 
-const cors = require('cors');
+//const cors = require('cors');
 const app = express();
 
 // Налаштування CORS
