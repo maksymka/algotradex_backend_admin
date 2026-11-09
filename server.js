@@ -132,12 +132,84 @@ app.get('/api/account', (req, res) => {
   res.json(data);
 });
 
-app.get('/api/funding', (req, res) => {
-  const bot = (req.query.bot || '').toLowerCase();
-  let rows = getFundingLog(200);
-  if (bot) rows = rows.filter(r => r.strategy === bot);
-  res.json({ rows });
+//app.get('/api/funding', (req, res) => {
+  //const bot = (req.query.bot || '').toLowerCase();
+  //let rows = getFundingLog(200);
+  //if (bot) rows = rows.filter(r => r.strategy === bot);
+  //res.json({ rows });
+//});
+// Отримання згрупованої статистики фандингу для нової вкладки
+app.get('/api/funding/summary', async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Звертаємося до таблиці global_funding
+    const { data, error } = await supabase
+      .from('global_funding')
+      .select('*')
+      .gte('recorded_at', thirtyDaysAgo.toISOString())
+      .order('recorded_at', { ascending: false });
+
+    if (error) throw error;
+
+    const summary = {};
+    ['alpha', 'beta', 'gamma', 'delta'].forEach(s => {
+      summary[s] = { total: 0, count: 0, history: [] };
+    });
+
+    if (data && data.length > 0) {
+      data.forEach(row => {
+        const strategy = row.strategy ? row.strategy.toLowerCase() : null;
+        
+        // Перевіряємо різні можливі назви колонок для суми
+        let amount = 0;
+        if (row.amount != null) amount = parseFloat(row.amount);
+        else if (row.funding != null) amount = parseFloat(row.funding);
+        else if (row.value != null) amount = parseFloat(row.value);
+        else if (row.funding_rate != null) amount = parseFloat(row.funding_rate);
+
+        if (strategy && summary[strategy]) {
+          summary[strategy].total += amount;
+          summary[strategy].count += 1;
+          if (summary[strategy].history.length < 20) {
+            summary[strategy].history.push({ 
+              date: row.recorded_at || new Date().toISOString(), 
+              amount: amount 
+            });
+          }
+        }
+      });
+    }
+
+    // Округляємо суми до 4 знаків
+    Object.keys(summary).forEach(s => {
+      summary[s].total = parseFloat(summary[s].total.toFixed(4));
+    });
+
+    res.json({ success: true, data: summary });
+  } catch (e) {
+    console.error('❌ Помилка отримання фандингу:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
+
+// Ручний запуск синхронізації фандингу (кнопка "Sync Now")
+app.post('/api/funding/sync', async (req, res) => {
+  try {
+    console.log('[API] Ручна синхронізація фандингу...');
+    if (typeof syncAllFunding === 'function') {
+      await syncAllFunding();
+      res.json({ success: true, message: 'Funding data synced' });
+    } else {
+      res.status(500).json({ error: 'Функція syncAllFunding не знайдена' });
+    }
+  } catch (e) {
+    console.error('❌ Помилка ручної синхронізації:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 app.get('/api/funding/summary', async (req, res) => {
   try {
@@ -193,6 +265,78 @@ app.post('/api/funding/sync', async (req, res) => {
     }
   } catch (e) {
     console.error('Manual sync error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Отримання згрупованої статистики фандингу для нової вкладки
+app.get('/api/funding/summary', async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Звертаємося до таблиці global_funding
+    const { data, error } = await supabase
+      .from('global_funding')
+      .select('*')
+      .gte('recorded_at', thirtyDaysAgo.toISOString())
+      .order('recorded_at', { ascending: false });
+
+    if (error) throw error;
+
+    const summary = {};
+    ['alpha', 'beta', 'gamma', 'delta'].forEach(s => {
+      summary[s] = { total: 0, count: 0, history: [] };
+    });
+
+    if (data && data.length > 0) {
+      data.forEach(row => {
+        const strategy = row.strategy ? row.strategy.toLowerCase() : null;
+        
+        // Перевіряємо різні можливі назви колонок для суми
+        let amount = 0;
+        if (row.amount != null) amount = parseFloat(row.amount);
+        else if (row.funding != null) amount = parseFloat(row.funding);
+        else if (row.value != null) amount = parseFloat(row.value);
+        else if (row.funding_rate != null) amount = parseFloat(row.funding_rate);
+
+        if (strategy && summary[strategy]) {
+          summary[strategy].total += amount;
+          summary[strategy].count += 1;
+          if (summary[strategy].history.length < 20) {
+            summary[strategy].history.push({ 
+              date: row.recorded_at || new Date().toISOString(), 
+              amount: amount 
+            });
+          }
+        }
+      });
+    }
+
+    // Округляємо суми до 4 знаків
+    Object.keys(summary).forEach(s => {
+      summary[s].total = parseFloat(summary[s].total.toFixed(4));
+    });
+
+    res.json({ success: true, data: summary });
+  } catch (e) {
+    console.error('❌ Помилка отримання фандингу:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Ручний запуск синхронізації фандингу (кнопка "Sync Now")
+app.post('/api/funding/sync', async (req, res) => {
+  try {
+    console.log('[API] Ручна синхронізація фандингу...');
+    if (typeof syncAllFunding === 'function') {
+      await syncAllFunding();
+      res.json({ success: true, message: 'Funding data synced' });
+    } else {
+      res.status(500).json({ error: 'Функція syncAllFunding не знайдена' });
+    }
+  } catch (e) {
+    console.error('❌ Помилка ручної синхронізації:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
