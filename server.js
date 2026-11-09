@@ -134,3 +134,19 @@ app.listen(PORT, '0.0.0.0', () => {
   syncAllFunding().catch(e => console.error('funding initial error', e.message));
   scheduleHourlyFunding();
 });
+
+const express = require('express');
+const cors = require('cors');
+const app = express();
+
+// Налаштування CORS
+app.use(cors({
+    origin: 'https://algotradex.ai', // Дозволяємо запити тільки з вашого домену
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+}));
+
+// Ваші роути йдуть далі...
+
+origin: ['https://algotradex.ai', 'http://localhost:3000']
