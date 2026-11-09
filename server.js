@@ -135,7 +135,6 @@ app.listen(PORT, '0.0.0.0', () => {
   scheduleHourlyFunding();
 });
 
-const express = require('express');
 const cors = require('cors');
 const app = express();
 
