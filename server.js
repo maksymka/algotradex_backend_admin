@@ -45,6 +45,83 @@ async function testSupabaseInsert() {
 // Викликаємо тест одразу при старті сервера
 testSupabaseInsert();
 
+// ==========================================
+// FUNDING ANALYTICS API
+// ==========================================
+
+// 1. Маршрут для ручного запуску синхронізації фандингу
+app.post('/api/funding/sync', async (req, res) => {
+    try {
+        console.log('[API] Manual funding sync triggered');
+        // Викликаємо вашу існуючу функцію синхронізації
+        // (переконайтеся, що syncAllFunding імпортована або доступна в цьому файлі)
+        if (typeof syncAllFunding === 'function') {
+            await syncAllFunding();
+            res.json({ success: true, message: 'Funding data synced successfully' });
+        } else {
+            res.status(500).json({ error: 'syncAllFunding function not found' });
+        }
+    } catch (error) {
+        console.error('❌ Manual sync error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. Маршрут для отримання агрегованої статистики фандингу
+app.get('/api/funding/summary', async (req, res) => {
+    try {
+        // Отримуємо дані за останні 30 днів
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const { data, error } = await supabase
+            .from('global_funding') // Перевірте назву таблиці (на скріншоті була global_funding)
+            .select('*')
+            .gte('recorded_at', thirtyDaysAgo.toISOString())
+            .order('recorded_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Групуємо дані по стратегіях
+        const summary = {};
+        
+        // Ініціалізуємо всі стратегії нулями
+        ['alpha', 'beta', 'gamma', 'delta'].forEach(s => {
+            summary[s] = { total: 0, count: 0, last_payment: 0, history: [] };
+        });
+
+        if (data && data.length > 0) {
+            data.forEach(row => {
+                // Припускаємо, що у таблиці є поля 'strategy' та 'amount' (або 'funding_rate')
+                const strategy = row.strategy?.toLowerCase();
+                const amount = parseFloat(row.amount || row.funding || 0);
+
+                if (summary[strategy]) {
+                    summary[strategy].total += amount;
+                    summary[strategy].count += 1;
+                    if (summary[strategy].history.length < 20) { // Беремо останні 20 записів для графіку
+                        summary[strategy].history.push({
+                            date: row.recorded_at,
+                            amount: amount
+                        });
+                    }
+                }
+            });
+        }
+
+        // Округляємо суми
+        Object.keys(summary).forEach(s => {
+            summary[s].total = parseFloat(summary[s].total.toFixed(4));
+        });
+
+        res.json({ success: true, data: summary });
+
+    } catch (error) {
+        console.error('❌ Funding summary error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ---------- Public API (dashboard) ----------
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
