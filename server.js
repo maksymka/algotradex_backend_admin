@@ -139,6 +139,64 @@ app.get('/api/funding', (req, res) => {
   res.json({ rows });
 });
 
+app.get('/api/funding/summary', async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data, error } = await supabase
+      .from('global_funding')
+      .select('*')
+      .gte('recorded_at', thirtyDaysAgo.toISOString())
+      .order('recorded_at', { ascending: false });
+
+    if (error) throw error;
+
+    const summary = {};
+    ['alpha', 'beta', 'gamma', 'delta'].forEach(s => {
+      summary[s] = { total: 0, count: 0, history: [] };
+    });
+
+    if (data && data.length > 0) {
+      data.forEach(row => {
+        const strategy = row.strategy?.toLowerCase();
+        const amount = parseFloat(row.amount || row.funding || 0);
+        if (summary[strategy]) {
+          summary[strategy].total += amount;
+          summary[strategy].count += 1;
+          if (summary[strategy].history.length < 20) {
+            summary[strategy].history.push({ date: row.recorded_at, amount: amount });
+          }
+        }
+      });
+    }
+
+    Object.keys(summary).forEach(s => {
+      summary[s].total = parseFloat(summary[s].total.toFixed(4));
+    });
+
+    res.json({ success: true, data: summary });
+  } catch (e) {
+    console.error('Funding summary error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/funding/sync', async (req, res) => {
+  try {
+    console.log('[API] Manual funding sync triggered');
+    if (typeof syncAllFunding === 'function') {
+      await syncAllFunding();
+      res.json({ success: true, message: 'Funding synced' });
+    } else {
+      res.status(500).json({ error: 'syncAllFunding not found' });
+    }
+  } catch (e) {
+    console.error('Manual sync error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/risk', (req, res) => {
   const bot = (req.query.bot || 'all').toLowerCase();
   const snap = getLatest(bot === 'all' ? 'all' : bot);
