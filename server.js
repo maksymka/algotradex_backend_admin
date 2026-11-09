@@ -10,7 +10,7 @@ import {
 import * as binance from './lib/binance.js';
 import * as bybit from './lib/bybit.js';
 import { getLatest, getFundingLog, syncAll, startCron } from './lib/tracker.js';
-import { syncAllFunding } from './lib/globalFunding.js';
+import { syncAllFunding } from './lib/globalfunding.js';
 import { supabase } from './lib/supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
