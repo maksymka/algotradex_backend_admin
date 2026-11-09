@@ -10,6 +10,8 @@ import {
 import * as binance from './lib/binance.js';
 import * as bybit from './lib/bybit.js';
 import { getLatest, getFundingLog, syncAll, startCron } from './lib/tracker.js';
+import { syncAllFunding } from './lib/globalFunding.js';
+import { supabase } from './lib/supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -58,6 +60,20 @@ app.get('/api/risk', (req, res) => {
   res.json({ positions: snap.positions || [], error: snap.error });
 });
 
+// ---------- HISTORY for auto daily PnL ----------
+app.get('/api/history', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('balance_history')
+      .select('strategy, balance, recorded_at')
+      .order('recorded_at', { ascending: true });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ---------- Admin ----------
 app.get('/admin/api/strategies', requireAdmin, (_, res) => {
   res.json({ strategies: listStrategiesPublic() });
@@ -93,26 +109,28 @@ app.post('/admin/api/sync', requireAdmin, async (_, res) => {
 });
 
 // SPA admin
-//app.get('/admin', (_, res) => {
-  //res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-//});
-
-// SPA admin
-app.get(['/admin', '/admin/'], (req, res) => {
-  const filePath = path.join(__dirname, 'public', 'admin.html');
-  console.log('Serving admin from:', filePath);
-  res.sendFile(filePath, (err) => {
-    if (err) {
-      console.error('Error sending admin.html:', err);
-      res.status(500).send('admin.html not found on server');
-    }
-  });
+app.get('/admin', (_, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`AlgoTradeX admin API on :${PORT}`);
   console.log(`Admin UI: http://localhost:${PORT}/admin`);
-  const ms = Number(process.env.SYNC_INTERVAL_MS || 300000); // default 5 min — avoid Binance IP ban
+  
+  const ms = Number(process.env.SYNC_INTERVAL_MS || 300000);
   startCron(ms);
+
+  // === ТОЧНИЙ ЩОГОДИННИЙ ЗАПИС ФАНДИНГУ ===
+  function scheduleHourlyFunding() {
+    const now = new Date();
+    const nextHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0, 0, 0);
+    const msUntilNext = nextHour.getTime() - now.getTime();
+    console.log(`[Cron] Next funding sync in ${Math.round(msUntilNext / 1000 / 60)} min.`);
+    setTimeout(() => {
+      syncAllFunding().catch(e => console.error('funding cron error', e.message));
+      scheduleHourlyFunding();
+    }, msUntilNext);
+  }
+  syncAllFunding().catch(e => console.error('funding initial error', e.message));
+  scheduleHourlyFunding();
 });
