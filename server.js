@@ -29,6 +29,22 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// ТЕСТОВИЙ ЗАПИС (видаліть після перевірки)
+async function testSupabaseInsert() {
+  const { data, error } = await supabase
+    .from('balance_history')
+    .insert([{ strategy: 'test', balance: 100, recorded_at: new Date() }]);
+
+  if (error) {
+    console.error('❌ Помилка тестового запису:', error);
+  } else {
+    console.log('✅ Тестовий запис успішний!', data);
+  }
+}
+
+// Викликаємо тест одразу при старті сервера
+testSupabaseInsert();
+
 // ---------- Public API (dashboard) ----------
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
