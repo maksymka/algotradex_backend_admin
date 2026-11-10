@@ -70,24 +70,37 @@ app.post('/api/funding/sync', async (req, res) => {
 // 2. Маршрут для отримання агрегованої статистики фандингу
 app.get('/api/funding/summary', async (req, res) => {
   try {
-    // Беремо останні записи з таблиці global_funding
     const { data, error } = await supabase
       .from('global_funding')
       .select('*')
       .order('next_funding_time', { ascending: false })
-      .limit(50); // Беремо останні 50 записів
+      .limit(100); // Беремо більше пар для статистики
 
     if (error) throw error;
 
-    // Оскільки таблиця не має прив'язки до стратегій (alpha/beta/gamma),
-    // ми просто повертаємо список актуальних ставок.
-    const formattedData = (data || []).map(row => ({
-      symbol: row.symbol,
-      exchange: row.exchange,
-      rate: parseFloat(row.funding_rate || 0),
-      mark_price: parseFloat(row.mark_price || 0),
-      next_time: row.next_funding_time
-    }));
+    const formattedData = (data || []).map(row => {
+      const rate = parseFloat(row.funding_rate || 0);
+      
+      // Розрахунок потенційного PnL (приблизно, якщо ставка не зміниться)
+      // Припускаємо, що фандинг сплачується кожні 8 годин (3 рази на день)
+      const dailyRate = rate * 3; 
+      
+      return {
+        symbol: row.symbol,
+        exchange: row.exchange,
+        rate: rate,
+        mark_price: parseFloat(row.mark_price || 0),
+        next_time: row.next_funding_time,
+        // PnL за різні періоди (у відсотках)
+        pnl_2h: rate * 0.25,   // 2 години = 1/4 від 8-годинного циклу
+        pnl_4h: rate * 0.5,    // 4 години = 1/2
+        pnl_8h: rate,          // 8 годин = 1 цикл
+        pnl_30d: dailyRate * 30,
+        pnl_90d: dailyRate * 90,
+        pnl_180d: dailyRate * 180,
+        pnl_360d: dailyRate * 360
+      };
+    });
 
     res.json({ success: true, data: formattedData });
   } catch (e) {
