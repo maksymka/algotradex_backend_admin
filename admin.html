@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AlgoTradeX · Admin</title>
+<style>
+  :root {
+    --bg:#0b0b0c; --panel:#141416; --card:#1a1a1e; --border:#2c2c32;
+    --text:#eee; --muted:#888; --green:#00e676; --red:#ff1744; --amber:#ffc400;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--text);
+    padding: 20px 16px 48px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  .card h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .7px;
+    color: var(--muted); margin: 0 0 10px; font-weight: 600;
+  }
+  label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin: 10px 0 4px; }
+  input, select {
+    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); font: inherit;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+  .btn {
+    margin-top: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .btn.primary { background: linear-gradient(180deg,#f0d078,#c9a24b); color:#1a1204; border-color:#a8832f; }
+  .btn.green { color: var(--green); border-color: rgba(0,230,118,.4); }
+  .btn.danger { color: var(--red); }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn-row .btn { margin-top: 0; }
+  .strat { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-top: 12px; background: var(--card); }
+  .strat h3 { margin: 0 0 6px; font-size: 15px; display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.on { color: var(--green); border-color: rgba(0,230,118,.4); }
+  .badge.off { color: var(--red); }
+  .msg { font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .msg.ok { color: var(--green); }
+  .msg.err { color: var(--red); }
+  .snap { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+  .snap b { color: var(--text); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+  .hidden { display: none !important; }
+  a { color: var(--amber); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .link-list { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .link-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); text-decoration: none;
+  }
+  .link-item:hover { border-color: var(--amber); text-decoration: none; }
+  .link-item span { color: var(--muted); font-size: 12px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+  code { font-size: 12px; background: var(--card); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AlgoTradeX · Admin</h1>
+  <p class="sub">API-ключі стратегій · тест · синк · Supabase · Support</p>
+
+  <div class="card" id="login-card">
+    <h2>Вхід</h2>
+    <label>Admin token</label>
+    <input id="token" type="password" placeholder="ADMIN_TOKEN з Railway" autocomplete="current-password">
+    <button class="btn primary" id="btn-login">Увійти</button>
+    <div class="msg" id="login-msg"></div>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="card">
+      <div class="btn-row">
+        <button class="btn green" id="btn-sync">Синк зараз</button>
+        <button class="btn" id="btn-refresh">Оновити список</button>
+        <button class="btn danger" id="btn-out">Вийти</button>
+      </div>
+      <div class="msg" id="sync-msg"></div>
+    </div>
+
+    <div id="list"></div>
+
+    <!-- Supabase · Early Access (як на дашборді) -->
+    <div class="card" id="sb-card">
+      <h2>Supabase · Early Access</h2>
+      <p class="hint">Leads: email · Telegram · WhatsApp → table <code>leads</code></p>
+      <label>Project URL</label>
+      <input id="sb-url" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off" spellcheck="false">
+      <label>anon public key</label>
+      <input id="sb-anon" type="text" placeholder="eyJhbGciOi..." autocomplete="off" spellcheck="false">
+      <p class="hint" id="sb-status">Not connected. Paste URL + anon key from Supabase → Settings → API, then Save.</p>
+      <button class="btn primary" id="sb-save">Save Supabase connection</button>
+      <div class="msg" id="sb-msg"></div>
+    </div>
+
+    <!-- Support -->
+    <div class="card" id="support-card">
+      <h2>Support</h2>
+      <div class="link-list">
+        <a class="link-item" href="cabinet.html" target="_blank" rel="noopener">
+          <b>Особистий кабінет · Google · реф 10%</b>
+          <span>cabinet.html →</span>
+        </a>
+        <a class="link-item" href="https://t.me/mktiv" target="_blank" rel="noopener">
+          <b>Telegram · Contact</b>
+          <span>@mktiv →</span>
+        </a>
+        <a class="link-item" href="index.html">
+          <b>Дашборд AlgoTradeX</b>
+          <span>index.html →</span>
+        </a>
+      </div>
+      <p class="hint" style="margin-top:12px">Email: <a href="#" id="copy-email">Maksym.Kryvenko@gmail.com</a> <span id="email-copied" class="hidden" style="color:var(--green)"> · Copied!</span></p>
+    </div>
+  </div>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  let TOKEN = localStorage.getItem('atx-admin-token') || '';
+
+  function headers(json = true) {
+    const h = { Authorization: 'Bearer ' + TOKEN };
+    if (json) h['Content-Type'] = 'application/json';
+    return h;
+  }
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, { ...opts, headers: { ...headers(opts.body != null), ...(opts.headers || {}) } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
+  }
+
+  // ---- Supabase (same keys as dashboard Settings) ----
+  function loadSbForm() {
+    try {
+      $('sb-url').value = localStorage.getItem('atx-supabase-url') || '';
+      $('sb-anon').value = localStorage.getItem('atx-supabase-anon') || '';
+    } catch (e) {}
+    updateSbStatus();
+  }
+  function updateSbStatus() {
+    const u = ($('sb-url').value || '').trim();
+    const k = ($('sb-anon').value || '').trim();
+    if (u && k) {
+      $('sb-status').textContent = 'Connected (saved in this browser). Dashboard Early Access uses the same keys.';
+      $('sb-status').style.color = 'var(--green)';
+    } else {
+      $('sb-status').textContent = 'Not connected. Paste URL + anon key from Supabase → Settings → API, then Save.';
+      $('sb-status').style.color = '';
+    }
+  }
+  $('sb-save').onclick = () => {
+    const u = ($('sb-url').value || '').trim();
+    const k = ($('sb-anon').value || '').trim();
+    try {
+      if (u) localStorage.setItem('atx-supabase-url', u); else localStorage.removeItem('atx-supabase-url');
+      if (k) localStorage.setItem('atx-supabase-anon', k); else localStorage.removeItem('atx-supabase-anon');
+    } catch (e) {}
+    updateSbStatus();
+    $('sb-msg').className = 'msg ok';
+    $('sb-msg').textContent = 'Saved';
+    setTimeout(() => { $('sb-msg').textContent = ''; }, 1500);
+  };
+
+  $('copy-email').onclick = async (e) => {
+    e.preventDefault();
+    try {
+      await navigator.clipboard.writeText('Maksym.Kryvenko@gmail.com');
+      $('email-copied').classList.remove('hidden');
+      setTimeout(() => $('email-copied').classList.add('hidden'), 1500);
+    } catch (_) {}
+  };
+
+  function showApp() {
+    $('login-card').classList.add('hidden');
+    $('app').classList.remove('hidden');
+    loadSbForm();
+    load();
+  }
+
+  $('btn-login').onclick = async () => {
+    TOKEN = $('token').value.trim();
+    $('login-msg').textContent = '';
+    try {
+      await api('/admin/api/strategies');
+      localStorage.setItem('atx-admin-token', TOKEN);
+      showApp();
+    } catch (e) {
+      $('login-msg').className = 'msg err';
+      $('login-msg').textContent = e.message;
+    }
+  };
+
+  $('btn-out').onclick = () => {
+    localStorage.removeItem('atx-admin-token');
+    location.reload();
+  };
+
+  $('btn-refresh').onclick = () => load();
+  $('btn-sync').onclick = async () => {
+    $('sync-msg').textContent = 'Sync…';
+    try {
+      const r = await api('/admin/api/sync', { method: 'POST', body: '{}' });
+      $('sync-msg').className = 'msg ok';
+      $('sync-msg').textContent = 'OK · ' + Object.keys(r.results || {}).join(', ');
+      load();
+    } catch (e) {
+      $('sync-msg').className = 'msg err';
+      $('sync-msg').textContent = e.message;
+    }
+  };
+
+  async function load() {
+    const { strategies } = await api('/admin/api/strategies');
+    const accounts = await fetch('/api/account?bot=all').then(r => r.json()).catch(() => ({}));
+    const root = $('list');
+    root.innerHTML = strategies.map(s => {
+      const snap = accounts[s.id];
+      let snapHtml = '<div class="snap">Немає знімку — натисни «Синк зараз»</div>';
+      if (snap?.error) snapHtml = `<div class="snap neg">Error: ${snap.error}</div>`;
+      else if (snap?.balance != null) {
+        const pos = (snap.positions || []).map(p => {
+          const liq = p.liqDistancePct != null ? p.liqDistancePct.toFixed(2) + '%' : '—';
+          const fr = p.lastFundingRate != null ? (p.lastFundingRate * 100).toFixed(4) + '%' : '—';
+          const cls = p.unRealizedProfit >= 0 ? 'pos' : 'neg';
+          return `<tr>
+            <td>${p.symbol}</td><td>${p.side}</td>
+            <td class="${cls}">${p.unRealizedProfit?.toFixed(2)}</td>
+            <td>${liq}</td><td>${fr}</td>
+          </tr>`;
+        }).join('') || '<tr><td colspan="5">Немає позицій</td></tr>';
+        snapHtml = `<div class="snap">
+          Balance <b>${Number(snap.balance).toFixed(2)}</b> · uPnL <b class="${snap.unrealizedPnl>=0?'pos':'neg'}">${Number(snap.unrealizedPnl).toFixed(2)}</b>
+          · ${snap.updatedAt || ''}
+          <table><thead><tr><th>Symbol</th><th>Side</th><th>uPnL</th><th>Liq dist</th><th>Funding</th></tr></thead>
+          <tbody>${pos}</tbody></table>
+        </div>`;
+      }
+      return `<div class="card strat" data-id="${s.id}">
+        <h3>${s.name} <span class="badge ${s.enabled?'on':'off'}">${s.enabled?'ON':'OFF'}</span>
+          <span class="badge">${s.exchange}</span></h3>
+        <div class="sub" style="margin:0">${s.label || ''} · ${s.hasKey ? 'key ' + s.keyHint : 'немає ключів'}</div>
+        <div class="row">
+          <div><label>API Key</label><input class="k" placeholder="${s.hasKey ? '•••• leave blank to keep' : 'API key'}" autocomplete="off"></div>
+          <div><label>API Secret</label><input class="s" type="password" placeholder="${s.hasKey ? '•••• leave blank to keep' : 'secret'}" autocomplete="off"></div>
+        </div>
+        <div class="row">
+          <div><label>Label</label><input class="label" value="${s.label || ''}"></div>
+          <div><label>Enabled</label>
+            <select class="en"><option value="true" ${s.enabled?'selected':''}>Yes</option><option value="false" ${!s.enabled?'selected':''}>No</option></select>
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn primary save">Зберегти</button>
+          <button class="btn green test">Test</button>
+        </div>
+        <div class="msg"></div>
+        ${snapHtml}
+      </div>`;
+    }).join('');
+
+    root.querySelectorAll('.strat').forEach(el => {
+      const id = el.dataset.id;
+      const msg = el.querySelector('.msg');
+      el.querySelector('.save').onclick = async () => {
+        msg.textContent = '';
+        const body = {
+          enabled: el.querySelector('.en').value === 'true',
+          label: el.querySelector('.label').value.trim(),
+        };
+        const k = el.querySelector('.k').value.trim();
+        const s = el.querySelector('.s').value.trim();
+        if (k) body.apiKey = k;
+        if (s) body.apiSecret = s;
+        try {
+          await api('/admin/api/strategies/' + id + '/keys', { method: 'PUT', body: JSON.stringify(body) });
+          msg.className = 'msg ok';
+          msg.textContent = 'Saved';
+          load();
+        } catch (e) {
+          msg.className = 'msg err';
+          msg.textContent = e.message;
+        }
+      };
+      el.querySelector('.test').onclick = async () => {
+        msg.textContent = 'Testing…';
+        const body = {};
+        const k = el.querySelector('.k').value.trim();
+        const s = el.querySelector('.s').value.trim();
+        if (k) body.apiKey = k;
+        if (s) body.apiSecret = s;
+        try {
+          await api('/admin/api/strategies/' + id + '/test', { method: 'POST', body: JSON.stringify(body) });
+          msg.className = 'msg ok';
+          msg.textContent = 'Connection OK';
+        } catch (e) {
+          msg.className = 'msg err';
+          msg.textContent = e.message;
+        }
+      };
+    });
+  }
+
+  if (TOKEN) {
+    api('/admin/api/strategies').then(showApp).catch(() => {
+      localStorage.removeItem('atx-admin-token');
+    });
+  }
+</script>
+</body>
+</html>
