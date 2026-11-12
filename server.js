@@ -130,13 +130,16 @@ app.get('/api/history', async (_req, res) => {
   try {
     const daily = await supabase
       .from('balance_daily')
-      .select('strategy, day, balance')
+      .select('strategy, day, balance, equity, equity_min, equity_max')
       .order('day', { ascending: true })
       .limit(5000);
     if (!daily.error && daily.data && daily.data.length) {
       return res.json(daily.data.map(r => ({
         strategy: r.strategy,
         balance: r.balance,
+        equity: r.equity,
+        equity_min: r.equity_min,
+        equity_max: r.equity_max,
         recorded_at: `${r.day}T12:00:00Z`,   // noon UTC → same calendar day in any timezone
       })));
     }

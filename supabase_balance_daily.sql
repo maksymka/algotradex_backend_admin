@@ -21,3 +21,8 @@ from public.balance_history
 where balance is not null
 order by strategy, (recorded_at at time zone 'Europe/Kyiv')::date, recorded_at desc
 on conflict (strategy, day) do update set balance = excluded.balance, updated_at = now();
+
+-- 3) equity (баланс + нереалізований PnL) і внутрішньоденні екстремуми — для точного Max Drawdown
+alter table public.balance_daily add column if not exists equity     numeric;
+alter table public.balance_daily add column if not exists equity_min numeric;
+alter table public.balance_daily add column if not exists equity_max numeric;
