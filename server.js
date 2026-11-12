@@ -121,15 +121,47 @@ app.get('/api/risk', (req, res) => {
   res.json({ positions: snap.positions || [], error: snap.error });
 });
 
+/**
+ * Daily closing balance per strategy → [{strategy, balance, recorded_at}]
+ * Primary: balance_daily (1 row / strategy / day). Fallback: paginated balance_history
+ * (Supabase returns max 1000 rows per request, so a plain select silently drops the NEWEST days).
+ */
 app.get('/api/history', async (_req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('balance_history')
-      .select('strategy, balance, recorded_at')
-      .order('recorded_at', { ascending: true });
-    if (error) throw error;
-    res.json(data || []);
+    const daily = await supabase
+      .from('balance_daily')
+      .select('strategy, day, balance')
+      .order('day', { ascending: true })
+      .limit(5000);
+    if (!daily.error && daily.data && daily.data.length) {
+      return res.json(daily.data.map(r => ({
+        strategy: r.strategy,
+        balance: r.balance,
+        recorded_at: `${r.day}T12:00:00Z`,   // noon UTC → same calendar day in any timezone
+      })));
+    }
+    if (daily.error) console.warn('[history] balance_daily unavailable → fallback:', daily.error.message);
+
+    const since = new Date(Date.now() - 120 * 86400000).toISOString();
+    const byKey = new Map();
+    for (let from = 0; from < 200000; from += 1000) {
+      const { data, error } = await supabase
+        .from('balance_history')
+        .select('strategy, balance, recorded_at')
+        .gte('recorded_at', since)
+        .order('recorded_at', { ascending: true })
+        .range(from, from + 999);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      for (const r of data) {
+        const day = new Date(r.recorded_at).toLocaleDateString('en-CA', { timeZone: process.env.DAY_TZ || 'Europe/Kyiv' });
+        byKey.set(`${r.strategy}|${day}`, r);       // ascending → last write wins = closing balance
+      }
+      if (data.length < 1000) break;
+    }
+    res.json([...byKey.values()]);
   } catch (e) {
+    console.error('history error:', e);
     res.status(500).json({ error: e.message });
   }
 });
