@@ -1,3 +1,4 @@
+import { syncLedger, flowsDaily, tradesDaily } from './lib/ledger.js';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -169,6 +170,16 @@ app.get('/api/history', async (_req, res) => {
   }
 });
 
+app.get('/api/flows', async (_req, res) => {
+  try { res.json(await flowsDaily()); }
+  catch (e) { console.warn('flows:', e.message); res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/trades', async (_req, res) => {
+  try { res.json(await tradesDaily()); }
+  catch (e) { console.warn('trades:', e.message); res.status(500).json({ error: e.message }); }
+});
+
 app.get('/admin/api/strategies', requireAdmin, (_req, res) => {
   res.json({ strategies: listStrategiesPublic() });
 });
@@ -195,6 +206,11 @@ app.post('/admin/api/strategies/:id/test', requireAdmin, async (req, res) => {
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message, body: e.body });
   }
+});
+
+app.post('/admin/api/ledger/sync', requireAdmin, async (req, res) => {
+  try { res.json(await syncLedger(req.query.id || undefined)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/admin/api/sync', requireAdmin, async (_req, res) => {
