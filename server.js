@@ -1,4 +1,6 @@
 import { syncLedger, flowsDaily, tradesDaily } from './lib/ledger.js';
+import { backfillBalances } from './lib/backfill.js';
+import { klines } from './lib/klines.js';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -170,6 +172,11 @@ app.get('/api/history', async (_req, res) => {
   }
 });
 
+app.get('/api/klines', async (req, res) => {
+  try { res.json(await klines(String(req.query.strategy || ''), String(req.query.symbol || '').toUpperCase(), String(req.query.interval || '1h'), req.query.limit)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 app.get('/api/flows', async (_req, res) => {
   try { res.json(await flowsDaily()); }
   catch (e) { console.warn('flows:', e.message); res.status(500).json({ error: e.message }); }
@@ -206,6 +213,11 @@ app.post('/admin/api/strategies/:id/test', requireAdmin, async (req, res) => {
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message, body: e.body });
   }
+});
+
+app.post('/admin/api/backfill', requireAdmin, async (req, res) => {
+  try { res.json(await backfillBalances(req.query.id || undefined, { from: req.query.from || undefined, force: true })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/admin/api/ledger/sync', requireAdmin, async (req, res) => {
