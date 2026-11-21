@@ -1,6 +1,7 @@
-import { syncLedger, flowsDaily, tradesDaily } from './lib/ledger.js';
+import { syncLedger, flowsDaily, tradesDaily, tradeHistory } from './lib/ledger.js';
 import { backfillBalances } from './lib/backfill.js';
 import { klines } from './lib/klines.js';
+import { getState, saveState } from './lib/state.js';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -177,6 +178,14 @@ app.get('/api/klines', async (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+app.get('/api/trade-history', async (req, res) => {
+  try {
+    const id = String(req.query.strategy || '').toLowerCase();
+    if (!/^[a-z0-9_-]{1,20}$/.test(id)) return res.status(400).json({ error: 'bad strategy' });
+    res.json({ strategy: id, cycles: await tradeHistory(id, Math.min(parseInt(req.query.limit, 10) || 300, 1000)) });
+  } catch (e) { console.warn('trade-history:', e.message); res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/flows', async (_req, res) => {
   try { res.json(await flowsDaily()); }
   catch (e) { console.warn('flows:', e.message); res.status(500).json({ error: e.message }); }
@@ -213,6 +222,23 @@ app.post('/admin/api/strategies/:id/test', requireAdmin, async (req, res) => {
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message, body: e.body });
   }
+});
+
+/** Manual strategy state: { status: 'liquidated'|'active', liquidated_at?, positions?: [...], note? }.
+ *  Without `positions`, the last positions known to the backend (or the live ones) are kept as the frozen snapshot. */
+app.post('/admin/api/state/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id, b = req.body || {};
+    const st = getState(id);
+    const patch = { status: b.status === 'liquidated' ? 'liquidated' : 'active', auto: false, note: b.note || st.note };
+    if (patch.status === 'liquidated') {
+      patch.liquidated_at = b.liquidated_at || st.liquidated_at || new Date().toISOString();
+      const live = (getLatest(id) || {}).positions || [];
+      if (Array.isArray(b.positions)) patch.last_positions = b.positions;
+      else if (!(st.last_positions || []).length && live.length) patch.last_positions = live;
+    } else { patch.liquidated_at = null; }
+    res.json(await saveState(id, patch, true));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/admin/api/backfill', requireAdmin, async (req, res) => {

@@ -80,3 +80,39 @@ on conflict (strategy, ref) do nothing;
 -- insert into public.balance_flows (strategy, ref, ts, amount, asset, source)
 -- values ('alpha', 'manual-alpha-deposit-1', '2026-07-15T12:00:00Z', 200, 'USDT', 'manual')
 -- on conflict (strategy, ref) do nothing;
+
+-- 9) стан стратегій: статус (active / liquidated) і останні відомі відкриті позиції
+create table if not exists public.strategy_state (
+  strategy       text primary key,
+  status         text        not null default 'active',
+  liquidated_at  timestamptz,
+  last_positions jsonb       not null default '[]'::jsonb,
+  last_balance   numeric,
+  last_equity    numeric,
+  note           text,
+  auto           boolean     not null default false,
+  updated_at     timestamptz not null default now()
+);
+alter table public.strategy_state enable row level security;
+
+-- 10) історія угод: окремі виконання ордерів (fills) і виплати фандингу — з них будуються цикли відкриття → закриття
+create table if not exists public.trade_fills (
+  strategy text        not null,
+  ref      text        not null,
+  ts       timestamptz not null,
+  symbol   text,
+  kind     text        not null,            -- 'fill' | 'funding'
+  side     text,                            -- BUY / SELL
+  leg      text,                            -- LONG / SHORT / BOTH
+  action   text,                            -- open / close (якщо біржа це віддає)
+  qty      numeric,
+  price    numeric,
+  quote    numeric,
+  fee      numeric     not null default 0,
+  realized numeric,
+  funding  numeric,                         -- > 0 отримано, < 0 сплачено
+  source   text        not null default 'api',
+  primary key (strategy, ref)
+);
+create index if not exists trade_fills_strategy_ts on public.trade_fills (strategy, ts);
+alter table public.trade_fills enable row level security;
