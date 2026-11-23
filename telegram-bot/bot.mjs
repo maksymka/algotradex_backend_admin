@@ -2,13 +2,9 @@
  * Minimal Telegram bot for the AlgoTradeX Mini App (Node 18+, no dependencies).
  *
  *   BOT_TOKEN          token from @BotFather
- *   APP_URL            https://algotradex.ai            (the page is the Mini App)
- *   API_URL            https://<your-backend>           (for /pnl and alerts)
- *   ALLOWED_CHAT_IDS   comma-separated Telegram chat ids allowed to see balances (/pnl, alerts). Empty = /pnl and alerts are OFF.
- *
- *   node bot.mjs
- *
- * In @BotFather also run /newapp (or /setmenubutton) so the Mini App has a short name; this bot sets the menu button itself.
+ *   APP_URL            https://algotradex.ai
+ *   API_URL            https://<your-backend>
+ *   ALLOWED_CHAT_IDS   comma-separated chat ids
  */
 const TOKEN = process.env.BOT_TOKEN;
 const APP_URL = process.env.APP_URL || 'https://algotradex.ai';
@@ -38,4 +34,97 @@ const openApp = {
 
 const money = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
 
-async function 
+async function snapshot() {
+  const r = await fetch(`${API_URL}/api/account?bot=all`);
+  const j = await r.json();
+  return j.data || j;
+}
+
+async function pnlText() {
+  const snap = await snapshot();
+  const rows = ['alpha', 'beta', 'gamma', 'delta']
+    .filter(id => snap[id] && !snap[id].error)
+    .map(id => {
+      const s = snap[id];
+      return `<b>${id[0].toUpperCase() + id.slice(1)}</b>${s.status === 'liquidated' ? ' ⛔ LIQUIDATED' : ''}\n  balance ${Number(s.balance).toFixed(2)} · uPnL ${money(Number(s.unrealizedPnl || 0))} · positions ${(s.positions || []).length}`;
+    });
+  return rows.join('\n\n') || 'No data';
+}
+
+async function handle(m) {
+  const chat = m.chat.id;
+  const text = (m.text || '').trim();
+
+  if (text.startsWith('/start') || text.startsWith('/app')) {
+    return send(chat, 'AlgoTradeX terminal', openApp);
+  }
+
+  if (text.startsWith('/pnl')) {
+    if (!ALLOWED.has(String(chat))) {
+      return send(chat, 'Not allowed. Your chat id: <code>' + chat + '</code>');
+    }
+    return send(chat, await pnlText().catch(e => 'Error: ' + e.message));
+  }
+}
+
+const seen = {};
+async function alerts() {
+  if (!API_URL || !ALLOWED.size) return;
+  try {
+    const snap = await snapshot();
+    for (const id of ['alpha', 'beta', 'gamma', 'delta']) {
+      const s = snap[id];
+      if (!s || s.error) continue;
+      if (s.status === 'liquidated' && seen[id] !== 'liquidated') {
+        if (seen[id] !== undefined) {
+          for (const c of ALLOWED) {
+            await send(c, `⛔ <b>Strategy ${id}</b> was liquidated`, openApp);
+          }
+        }
+      }
+      seen[id] = s.status;
+    }
+  } catch (e) {
+    console.warn('alerts', e.message);
+  }
+}
+setInterval(alerts, 60_000);
+alerts();
+
+(async () => {
+  const menu = await api('setChatMenuButton', {
+    menu_button: {
+      type: 'web_app',
+      text: 'Terminal',
+      web_app: { url: APP_URL },
+    },
+  });
+  console.log('setChatMenuButton:', menu.ok ? 'ok' : menu);
+
+  let offset = 0;
+  console.log('bot started');
+
+  for (;;) {
+    try {
+      const r = await api('getUpdates', {
+        offset,
+        timeout: 30,
+        allowed_updates: ['message'],
+      });
+
+      if (!r.ok) {
+        console.error('getUpdates error:', r.error_code, r.description);
+        await new Promise(resolve => setTimeout(resolve, r.error_code === 409 ? 10000 : 3000));
+        continue;
+      }
+
+      for (const u of r.result || []) {
+        offset = u.update_id + 1;
+        if (u.message) await handle(u.message);
+      }
+    } catch (e) {
+      console.warn('poll exception:', e.message);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+})();
