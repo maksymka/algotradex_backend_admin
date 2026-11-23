@@ -45,7 +45,6 @@ const helpMenu = { reply_markup: { inline_keyboard: [
 async function snapshot() {
   if (!API_URL) throw new Error('API_URL is not configured in .env');
   
-  // Додаємо тайм-аут 5 секунд, щоб бот не зависав, якщо бекенд не відповідає
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
   
@@ -75,8 +74,8 @@ function calcDays(startDateStr, endDateStr = null) {
 // Статичні дані для стратегій (те, чого немає в API)
 const STATIC_META = {
   alpha: { depo: 1187, start: '2026-07-01', out: 0 },
-  beta: { depo: 700, max: 862, maxPct: 23, out: 81, start: '2024-06-23', stop: '2024-10-17', result: -619 },
-  gamma: { depo: 500, max: 560, maxPct: 12, start: '2026-08-10', stop: '2026-11-19' },
+  beta:  { final: -619, max: 862, maxPct: 23, out: 81, start: '2026-06-23', stop: '2026-10-17' },
+  gamma: { final: -500, max: 560, maxPct: 12, start: '2026-08-10', stop: '2026-11-19' },
   delta: { depo: 500, start: '2026-10-26', out: 0 }
 };
 
@@ -124,9 +123,9 @@ async function renderBalance() {
     const balance = Number(s.balance || 0).toFixed(2);
     const meta = STATIC_META[id] || {};
     
-    // Якщо API раптом почне віддавати maxSum, бот його підхопить. Інакше беремо з STATIC_META.
+    // Якщо API віддасть maxSum — використаємо його, інакше беремо зі STATIC_META або пишемо "API"
     const maxVal = s.maxSum || meta.max;
-    const maxStr = maxVal ? `${maxVal}$` : 'API'; // Якщо ніде немає, пишемо просто "API"
+    const maxStr = maxVal ? `${maxVal}$` : 'API';
     
     if (id === 'alpha') {
       const days = calcDays(meta.start);
@@ -134,11 +133,13 @@ async function renderBalance() {
     }
     
     if (id === 'beta') {
-      return `<b>Beta</b>  ${balance} (Depo: ${meta.depo}$, Max: ${meta.max}$(${meta.maxPct}%), Out: ${meta.out}$, Start: ${meta.start}, Stop: ${meta.stop}, Days: 117, Result: ${meta.result}$)`;
+      // Final:-619$  (без пробілу після двокрапки), без Depo, ,Out: 81$ (без пробілу після коми)
+      return `<b>Beta</b>  ${balance} (Final:${meta.final}$, Max: ${meta.max}$(${meta.maxPct}%),Out: ${meta.out}$, Start: ${meta.start}, Stop: ${meta.stop}, Days: 117)`;
     }
     
     if (id === 'gamma') {
-      return `<b>Gamma</b>  ${balance} (Depo: ${meta.depo}$, Max: ${meta.max}$(${meta.maxPct}%), Start: ${meta.start}, Stop Date: ${meta.stop}, Days: 102)`;
+      // Final: -500$  (з пробілом після двокрапки), Stop: замість Stop Date:
+      return `<b>Gamma</b>  ${balance} (Final: ${meta.final}$, Max: ${meta.max}$(${meta.maxPct}%), Start: ${meta.start}, Stop: ${meta.stop}, Days: 102)`;
     }
     
     if (id === 'delta') {
