@@ -54,9 +54,19 @@ async function snapshot() {
   return j.data || j;
 }
 
-// Оновлена функція: додаємо кастомні дані для Beta
+// Функція для підрахунку днів (включно з обома датами)
+function calcDays(startDateStr, endDateStr = null) {
+  if (!startDateStr) return '—';
+  const start = new Date(startDateStr);
+  const end = endDateStr ? new Date(endDateStr) : new Date();
+  if (isNaN(start) || isNaN(end)) return '—';
+  const startUTC = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const endUTC = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+  return Math.floor((endUTC - startUTC) / (1000 * 60 * 60 * 24)) + 1;
+}
+
+// Оновлена функція для Beta з фіксованими даними
 const getRows = snap => IDS.map(id => {
-  // Жорстко задані дані для Beta
   if (id === 'beta') {
     return {
       id,
@@ -65,8 +75,7 @@ const getRows = snap => IDS.map(id => {
         balance: 0,
         unrealizedPnl: 0,
         netPnl: -619,
-        positions: [],
-        extra: '(Start: 1000$, Max: 1200$, Start Date: 2024-01-01, Max UR PnL: +50$ (10%), Stop Date: 2024-06-01, Days: 150)'
+        positions: []
       }
     };
   }
@@ -77,7 +86,6 @@ const getRows = snap => IDS.map(id => {
   }
   if (s.error) {
     if (s.error === 'not configured') {
-      // Для інших стратегій, якщо не налаштовано
       return { id, s: { status: 'liquidated', balance: 0, unrealizedPnl: 0, positions: [] } };
     }
     return { id, s: { status: 'error', error: s.error, balance: 0, unrealizedPnl: 0, positions: [] } };
@@ -102,9 +110,31 @@ async function renderStatus() {
 
 async function renderBalance() {
   const rows = getRows(await snapshot());
+  
   return rows.map(({ id, s }) => {
-    const extra = s.extra ? ` ${s.extra}` : '';
-    return `<b>${cap(id)}</b>  ${Number(s.balance).toFixed(2)}${extra}`;
+    const balance = Number(s.balance || 0).toFixed(2);
+    
+    if (id === 'alpha') {
+      const max = s.maxSum ? `${s.maxSum}$` : '<from API>';
+      const days = calcDays('2026-07-01');
+      return `<b>Alpha</b>  ${balance} (Depo: 1187$, Max: ${max}, Out: 0$, Start: 2026-07-01, Days: ${days})`;
+    }
+    
+    if (id === 'beta') {
+      return `<b>Beta</b>  ${balance} (Depo: 700$, Max: 862$(23%), Out: 81$, Start: 2024-06-23, Stop: 2024-10-17, Days: 117, Result: - 619$)`;
+    }
+    
+    if (id === 'gamma') {
+      return `<b>Gamma</b>  ${balance} (Depo: 500$, Max: 560$(12%), Start: 2026-08-10, Stop Date: 2026-11-19, Days: 102)`;
+    }
+    
+    if (id === 'delta') {
+      const max = s.maxSum ? `${s.maxSum}$` : '<from API>';
+      const days = calcDays('2026-10-26');
+      return `<b>Delta</b>  ${balance} (Depo: 500$, Max: ${max}, Out: 0$, Start: 2026-10-26, Days: ${days})`;
+    }
+    
+    return `<b>${cap(id)}</b>  ${balance}`;
   }).join('\n');
 }
 
@@ -143,7 +173,6 @@ async function renderPositions() {
 async function renderPnl() {
   const rows = getRows(await snapshot());
   return rows.map(({ id, s }) => {
-    // Кастомний вивід для Beta
     if (id === 'beta') {
       return `<b>${cap(id)}</b> ⛔ LIQUIDATED\n  Current Balance: 0\n  Unrealized PnL: +0.00 USDT\n  Net PnL (now): -619 USDT`;
     }
