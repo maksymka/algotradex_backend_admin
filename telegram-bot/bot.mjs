@@ -81,8 +81,18 @@ async function renderPositions() {
   const rows = getRows(await snapshot());
   const out = [];
   for (const { id, s } of rows) {
+    // Перевіряємо, чи не ліквідована стратегія (це перехопить і Beta, і Gamma)
+    if (s.status === 'liquidated') {
+      out.push(`<b>${cap(id)}</b> ⛔ LIQUIDATED`);
+      continue;
+    }
+    
     const pos = s.positions || [];
-    if (!pos.length) { out.push(`<b>${cap(id)}</b> — no open positions`); continue; }
+    if (!pos.length) { 
+      out.push(`<b>${cap(id)}</b> — no open positions`); 
+      continue; 
+    }
+    
     out.push(`<b>${cap(id)}</b>`);
     for (const p of pos) {
       const sym   = p.symbol || p.asset || '?';
