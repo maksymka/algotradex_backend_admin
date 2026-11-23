@@ -54,26 +54,33 @@ async function snapshot() {
   const j = await r.json();
   return j.data || j;
 }
-const getRows = snap => IDS.filter(id => snap[id] && !snap[id].error).map(id => ({ id, s: snap[id] }));
+
+// Оновлена функція: якщо є помилка, підставляємо ліквідований статус з нулями
+const getRows = snap => IDS.map(id => {
+  const s = snap[id];
+  if (!s || s.error) {
+    return { id, s: { status: 'liquidated', balance: 0, unrealizedPnl: 0, positions: [] } };
+  }
+  return { id, s };
+});
 
 async function renderStatus() {
   const rows = getRows(await snapshot());
-  if (!rows.length) return 'No data';
+  // padEnd(5) вирівнює назви стратегій (Alpha, Beta, Gamma, Delta) в один стовпчик
   return rows.map(({ id, s }) => {
-    const flag = s.status === 'liquidated' ? ' ⛔' : s.status === 'active' ? ' 🟢' : ' ⚪';
-    return `<b>${cap(id)}</b>${flag} — ${s.status || 'unknown'}`;
+    const flag = s.status === 'liquidated' ? '⛔' : s.status === 'active' ? '🟢' : '⚪';
+    const paddedId = cap(id).padEnd(5, ' ');
+    return `${paddedId} ${flag} — ${s.status || 'unknown'}`;
   }).join('\n');
 }
 
 async function renderBalance() {
   const rows = getRows(await snapshot());
-  if (!rows.length) return 'No data';
   return rows.map(({ id, s }) => `<b>${cap(id)}</b>  ${Number(s.balance).toFixed(2)}`).join('\n');
 }
 
 async function renderPositions() {
   const rows = getRows(await snapshot());
-  if (!rows.length) return 'No data';
   const out = [];
   for (const { id, s } of rows) {
     const pos = s.positions || [];
@@ -93,7 +100,6 @@ async function renderPositions() {
 
 async function renderPnl() {
   const rows = getRows(await snapshot());
-  if (!rows.length) return 'No data';
   return rows.map(({ id, s }) => {
     const liq = s.status === 'liquidated' ? ' ⛔ LIQUIDATED' : '';
     return `<b>${cap(id)}</b>${liq}\n  balance ${Number(s.balance).toFixed(2)} · uPnL ${money(Number(s.unrealizedPnl || 0))} · positions ${(s.positions || []).length}`;
@@ -152,7 +158,6 @@ async function handleCallback(cq) {
   const res = await render(cq.data, chat);
   if (!res) return;
   const r = await edit(chat, cq.message.message_id, res.text, res.extra);
-  // if "message is not modified" — ignore; other errors — send as new message
   if (!r.ok && !/not modified/i.test(r.description || '')) {
     await send(chat, res.text, res.extra);
   }
@@ -177,7 +182,6 @@ setInterval(alerts, 60_000); alerts();
 
 // ---------- startup ----------
 (async () => {
-  // top-left command menu (what Telegram shows on "/")
   await api('setMyCommands', { commands: [
     { command: 'start',     description: 'Open menu' },
     { command: 'status',    description: 'Short status of all strategies' },
@@ -189,7 +193,6 @@ setInterval(alerts, 60_000); alerts();
     { command: 'help',      description: 'List all commands' },
   ]}).catch(e => console.warn('setMyCommands', e.message));
 
-  // menu button that opens the Mini App
   await api('setChatMenuButton', {
     menu_button: { type: 'web_app', text: 'Terminal', web_app: { url: APP_URL } }
   }).catch(e => console.warn('setChatMenuButton', e.message));
