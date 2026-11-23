@@ -54,18 +54,32 @@ async function snapshot() {
   return j.data || j;
 }
 
-// Оновлена функція: розділяємо "not configured" (Beta) та інші помилки/відсутність (Delta)
+// Оновлена функція: додаємо кастомні дані для Beta
 const getRows = snap => IDS.map(id => {
+  // Жорстко задані дані для Beta
+  if (id === 'beta') {
+    return {
+      id,
+      s: {
+        status: 'liquidated',
+        balance: 0,
+        unrealizedPnl: 0,
+        netPnl: -619,
+        positions: [],
+        extra: '(Start: 1000$, Max: 1200$, Start Date: 2024-01-01, Max UR PnL: +50$ (10%), Stop Date: 2024-06-01, Days: 150)'
+      }
+    };
+  }
+
   const s = snap[id];
   if (!s) {
     return { id, s: { status: 'missing', error: 'no data', balance: 0, unrealizedPnl: 0, positions: [] } };
   }
   if (s.error) {
     if (s.error === 'not configured') {
-      // Тільки для Beta: показуємо як ліквідовану
+      // Для інших стратегій, якщо не налаштовано
       return { id, s: { status: 'liquidated', balance: 0, unrealizedPnl: 0, positions: [] } };
     }
-    // Інші помилки (наприклад, у Delta) показуємо як 'error'
     return { id, s: { status: 'error', error: s.error, balance: 0, unrealizedPnl: 0, positions: [] } };
   }
   return { id, s };
@@ -88,7 +102,10 @@ async function renderStatus() {
 
 async function renderBalance() {
   const rows = getRows(await snapshot());
-  return rows.map(({ id, s }) => `<b>${cap(id)}</b>  ${Number(s.balance).toFixed(2)}`).join('\n');
+  return rows.map(({ id, s }) => {
+    const extra = s.extra ? ` ${s.extra}` : '';
+    return `<b>${cap(id)}</b>  ${Number(s.balance).toFixed(2)}${extra}`;
+  }).join('\n');
 }
 
 async function renderPositions() {
@@ -126,6 +143,11 @@ async function renderPositions() {
 async function renderPnl() {
   const rows = getRows(await snapshot());
   return rows.map(({ id, s }) => {
+    // Кастомний вивід для Beta
+    if (id === 'beta') {
+      return `<b>${cap(id)}</b> ⛔ LIQUIDATED\n  Current Balance: 0\n  Unrealized PnL: +0.00 USDT\n  Net PnL (now): -619 USDT`;
+    }
+
     if (s.status === 'error' || s.status === 'missing') {
       return `<b>${cap(id)}</b> ⚠️ ${s.error}\n  balance 0.00 · uPnL +0.00 · positions 0`;
     }
