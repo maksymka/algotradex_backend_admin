@@ -54,11 +54,19 @@ async function snapshot() {
   return j.data || j;
 }
 
-// Функція обробки помилок (Beta без конфігурації стає ліквідованою з нулями)
+// Оновлена функція: розділяємо "not configured" (Beta) та інші помилки/відсутність (Delta)
 const getRows = snap => IDS.map(id => {
   const s = snap[id];
-  if (!s || s.error) {
-    return { id, s: { status: 'liquidated', balance: 0, unrealizedPnl: 0, positions: [] } };
+  if (!s) {
+    return { id, s: { status: 'missing', error: 'no data', balance: 0, unrealizedPnl: 0, positions: [] } };
+  }
+  if (s.error) {
+    if (s.error === 'not configured') {
+      // Тільки для Beta: показуємо як ліквідовану
+      return { id, s: { status: 'liquidated', balance: 0, unrealizedPnl: 0, positions: [] } };
+    }
+    // Інші помилки (наприклад, у Delta) показуємо як 'error'
+    return { id, s: { status: 'error', error: s.error, balance: 0, unrealizedPnl: 0, positions: [] } };
   }
   return { id, s };
 });
@@ -66,9 +74,15 @@ const getRows = snap => IDS.map(id => {
 async function renderStatus() {
   const rows = getRows(await snapshot());
   return rows.map(({ id, s }) => {
-    const flag = s.status === 'liquidated' ? '⛔' : s.status === 'active' ? '🟢' : '⚪';
+    let flag = '⚪', label = s.status || 'unknown';
+    
+    if (s.status === 'liquidated') { flag = '⛔'; label = 'liquidated'; }
+    else if (s.status === 'active') { flag = '🟢'; label = 'active'; }
+    else if (s.status === 'error') { flag = '⚠️'; label = 'error'; }
+    else if (s.status === 'missing') { flag = '❓'; label = 'no data'; }
+
     const paddedId = cap(id).padEnd(5, ' ');
-    return `${paddedId} ${flag} — ${s.status || 'unknown'}`;
+    return `${paddedId} ${flag} — ${label}`;
   }).join('\n');
 }
 
@@ -81,9 +95,12 @@ async function renderPositions() {
   const rows = getRows(await snapshot());
   const out = [];
   for (const { id, s } of rows) {
-    // Перевіряємо, чи не ліквідована стратегія (це перехопить і Beta, і Gamma)
     if (s.status === 'liquidated') {
       out.push(`<b>${cap(id)}</b> ⛔ LIQUIDATED`);
+      continue;
+    }
+    if (s.status === 'error' || s.status === 'missing') {
+      out.push(`<b>${cap(id)}</b> ⚠️ ${s.error}`);
       continue;
     }
     
@@ -109,6 +126,9 @@ async function renderPositions() {
 async function renderPnl() {
   const rows = getRows(await snapshot());
   return rows.map(({ id, s }) => {
+    if (s.status === 'error' || s.status === 'missing') {
+      return `<b>${cap(id)}</b> ⚠️ ${s.error}\n  balance 0.00 · uPnL +0.00 · positions 0`;
+    }
     const liq = s.status === 'liquidated' ? ' ⛔ LIQUIDATED' : '';
     return `<b>${cap(id)}</b>${liq}\n  balance ${Number(s.balance).toFixed(2)} · uPnL ${money(Number(s.unrealizedPnl || 0))} · positions ${(s.positions || []).length}`;
   }).join('\n\n');
