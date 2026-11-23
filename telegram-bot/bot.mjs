@@ -34,9 +34,8 @@ const openAppKb  = { reply_markup: { inline_keyboard: [[openAppBtn]] } };
 const mainMenu = { reply_markup: { inline_keyboard: [
   [{ text: '📊 Status',    callback_data: 'status'    }, { text: '💼 Balances', callback_data: 'balance' }],
   [{ text: '📂 Positions', callback_data: 'positions' }, { text: '💰 PnL',      callback_data: 'pnl'     }],
-  [{ text: '🆔 Chat id',   callback_data: 'id'        }, { text: '🏓 Ping',     callback_data: 'ping'    }],
-  [openAppBtn],
-  [{ text: '❓ Help', callback_data: 'help' }],
+  [{ text: '🏓 Ping',      callback_data: 'ping'      }, { text: '❓ Help',      callback_data: 'help'    }],
+  [openAppBtn]
 ]}};
 
 const backMenu = { reply_markup: { inline_keyboard: [[{ text: '« Menu', callback_data: 'menu' }]] } };
@@ -55,7 +54,7 @@ async function snapshot() {
   return j.data || j;
 }
 
-// Оновлена функція: якщо є помилка, підставляємо ліквідований статус з нулями
+// Функція обробки помилок (Beta без конфігурації стає ліквідованою з нулями)
 const getRows = snap => IDS.map(id => {
   const s = snap[id];
   if (!s || s.error) {
@@ -66,7 +65,6 @@ const getRows = snap => IDS.map(id => {
 
 async function renderStatus() {
   const rows = getRows(await snapshot());
-  // padEnd(5) вирівнює назви стратегій (Alpha, Beta, Gamma, Delta) в один стовпчик
   return rows.map(({ id, s }) => {
     const flag = s.status === 'liquidated' ? '⛔' : s.status === 'active' ? '🟢' : '⚪';
     const paddedId = cap(id).padEnd(5, ' ');
