@@ -1,11 +1,5 @@
 /**
  * AlgoTradeX Telegram bot (Node 18+, no deps).
- *
- * ENV:
- *   BOT_TOKEN          from @BotFather
- *   APP_URL            https://algotradex.ai (Mini App page)
- *   API_URL            https://<backend>     (for /status, /balance, /positions, /pnl, alerts)
- *   ALLOWED_CHAT_IDS   comma-separated chat ids allowed to see account data. Empty = account commands OFF.
  */
 const TOKEN = process.env.BOT_TOKEN;
 const APP_URL = process.env.APP_URL || 'https://algotradex.ai';
@@ -49,12 +43,25 @@ const helpMenu = { reply_markup: { inline_keyboard: [
 
 // ---------- data ----------
 async function snapshot() {
-  const r = await fetch(`${API_URL}/api/account?bot=all`);
-  const j = await r.json();
-  return j.data || j;
+  if (!API_URL) throw new Error('API_URL is not configured in .env');
+  
+  // Додаємо тайм-аут 5 секунд, щоб бот не зависав, якщо бекенд не відповідає
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  
+  try {
+    const r = await fetch(`${API_URL}/api/account?bot=all`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!r.ok) throw new Error(`API error: ${r.status}`);
+    const j = await r.json();
+    return j.data || j;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') throw new Error('API timeout (сервер не відповідає)');
+    throw err;
+  }
 }
 
-// Функція для підрахунку днів (включно з обома датами)
 function calcDays(startDateStr, endDateStr = null) {
   if (!startDateStr) return '—';
   const start = new Date(startDateStr);
@@ -65,18 +72,20 @@ function calcDays(startDateStr, endDateStr = null) {
   return Math.floor((endUTC - startUTC) / (1000 * 60 * 60 * 24)) + 1;
 }
 
-// Оновлена функція для Beta з фіксованими даними
+// Статичні дані для стратегій (те, чого немає в API)
+const STATIC_META = {
+  alpha: { depo: 1187, start: '2026-07-01', out: 0 },
+  beta: { depo: 700, max: 862, maxPct: 23, out: 81, start: '2024-06-23', stop: '2024-10-17', result: -619 },
+  gamma: { depo: 500, max: 560, maxPct: 12, start: '2026-08-10', stop: '2026-11-19' },
+  delta: { depo: 500, start: '2026-10-26', out: 0 }
+};
+
 const getRows = snap => IDS.map(id => {
+  // Для Beta дані ліквідації фіксовані
   if (id === 'beta') {
     return {
       id,
-      s: {
-        status: 'liquidated',
-        balance: 0,
-        unrealizedPnl: 0,
-        netPnl: -619,
-        positions: []
-      }
+      s: { status: 'liquidated', balance: 0, unrealizedPnl: 0, netPnl: -619, positions: [] }
     };
   }
 
@@ -113,25 +122,28 @@ async function renderBalance() {
   
   return rows.map(({ id, s }) => {
     const balance = Number(s.balance || 0).toFixed(2);
+    const meta = STATIC_META[id] || {};
+    
+    // Якщо API раптом почне віддавати maxSum, бот його підхопить. Інакше беремо з STATIC_META.
+    const maxVal = s.maxSum || meta.max;
+    const maxStr = maxVal ? `${maxVal}$` : 'API'; // Якщо ніде немає, пишемо просто "API"
     
     if (id === 'alpha') {
-      const max = s.maxSum ? `${s.maxSum}$` : '<from API>';
-      const days = calcDays('2026-07-01');
-      return `<b>Alpha</b>  ${balance} (Depo: 1187$, Max: ${max}, Out: 0$, Start: 2026-07-01, Days: ${days})`;
+      const days = calcDays(meta.start);
+      return `<b>Alpha</b>  ${balance} (Depo: ${meta.depo}$, Max: ${maxStr}, Out: ${meta.out}$, Start: ${meta.start}, Days: ${days})`;
     }
     
     if (id === 'beta') {
-      return `<b>Beta</b>  ${balance} (Depo: 700$, Max: 862$(23%), Out: 81$, Start: 2024-06-23, Stop: 2024-10-17, Days: 117, Result: - 619$)`;
+      return `<b>Beta</b>  ${balance} (Depo: ${meta.depo}$, Max: ${meta.max}$(${meta.maxPct}%), Out: ${meta.out}$, Start: ${meta.start}, Stop: ${meta.stop}, Days: 117, Result: ${meta.result}$)`;
     }
     
     if (id === 'gamma') {
-      return `<b>Gamma</b>  ${balance} (Depo: 500$, Max: 560$(12%), Start: 2026-08-10, Stop Date: 2026-11-19, Days: 102)`;
+      return `<b>Gamma</b>  ${balance} (Depo: ${meta.depo}$, Max: ${meta.max}$(${meta.maxPct}%), Start: ${meta.start}, Stop Date: ${meta.stop}, Days: 102)`;
     }
     
     if (id === 'delta') {
-      const max = s.maxSum ? `${s.maxSum}$` : '<from API>';
-      const days = calcDays('2026-10-26');
-      return `<b>Delta</b>  ${balance} (Depo: 500$, Max: ${max}, Out: 0$, Start: 2026-10-26, Days: ${days})`;
+      const days = calcDays(meta.start);
+      return `<b>Delta</b>  ${balance} (Depo: ${meta.depo}$, Max: ${maxStr}, Out: ${meta.out}$, Start: ${meta.start}, Days: ${days})`;
     }
     
     return `<b>${cap(id)}</b>  ${balance}`;
@@ -199,7 +211,7 @@ Tap a button below 👇`;
 
 // ---------- dispatcher ----------
 function guard(chat) {
-  if (!ALLOWED.size) return null;                       // open mode
+  if (!ALLOWED.size) return null;
   return ALLOWED.has(String(chat)) ? null : `Not allowed. Your chat id: <code>${chat}</code>`;
 }
 
@@ -234,11 +246,18 @@ async function handleMessage(m) {
 async function handleCallback(cq) {
   await answerCb(cq.id);
   const chat = cq.message.chat.id;
-  const res = await render(cq.data, chat);
-  if (!res) return;
-  const r = await edit(chat, cq.message.message_id, res.text, res.extra);
-  if (!r.ok && !/not modified/i.test(r.description || '')) {
-    await send(chat, res.text, res.extra);
+  
+  try {
+    const res = await render(cq.data, chat);
+    if (!res) return;
+    
+    const r = await edit(chat, cq.message.message_id, res.text, res.extra);
+    if (!r.ok && !/not modified/i.test(r.description || '')) {
+      await send(chat, res.text, res.extra);
+    }
+  } catch (e) {
+    console.error('Callback error:', e);
+    await send(chat, `❌ Error: ${e.message}`, backMenu);
   }
 }
 
